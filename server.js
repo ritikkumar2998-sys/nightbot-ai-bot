@@ -98,14 +98,21 @@ STRICT RULES:
 5. Fit nicely inside live stream chat character limits.`;
 
   try {
-    // Primary model and fallback for high demand spikes
-    const candidateModels = ['gemini-flash-latest', 'gemini-3.8-flash', 'gemini-3.1-flash-lite'];
+    // Overall request timeout: Nightbot terminates $(urlfetch) at 10 seconds.
+    // We allow up to 8.5 seconds total so we always deliver a prompt reply.
+    const overallDeadline = Date.now() + 8500;
+    const candidateModels = ['gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest'];
     let answer = '';
 
     for (const modelName of candidateModels) {
+      const remainingTime = overallDeadline - Date.now();
+      if (remainingTime < 2000) {
+        break;
+      }
+
       try {
         const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('TIMEOUT')), 7000)
+          setTimeout(() => reject(new Error('TIMEOUT')), remainingTime)
         );
 
         const apiPromise = ai.models.generateContent({
@@ -113,7 +120,8 @@ STRICT RULES:
           contents: sanitized,
           config: {
             systemInstruction,
-            temperature: 0.7
+            temperature: 0.6,
+            maxOutputTokens: 90
           }
         });
 
@@ -124,7 +132,7 @@ STRICT RULES:
           break;
         }
       } catch (err) {
-        console.warn(`Model ${modelName} failed or busy, trying fallback...`);
+        // Silently try next fallback model
       }
     }
 
